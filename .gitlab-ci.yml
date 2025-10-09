@@ -1,3 +1,6 @@
+# GitLab CI/CD Pipeline for Maven Projects
+# This file should be placed in your project root as .gitlab-ci.yml
+
 stages:
   - build
   - test
@@ -9,72 +12,77 @@ variables:
   DEPLOY_SERVER: "3.101.190.84" # Your EC2 instance
   DEPLOY_USER: "ec2-user" # EC2 default user
   DEPLOY_PATH: "/home/ec2-user/webapp" # Deployment path
-  GIT_STRATEGY: "none"
-  GIT_CLEAN_FLAGS: "-ffdx"
-  GIT_CLONE_PATH: "$CI_BUILDS_DIR/manual-clone"
+  TOMCAT_WEBAPPS: "/usr/local/tomcat/webapps"
 
 cache:
   paths:
     - .m2/repository
 
+# Build stage - Compile the source code
 build:
   stage: build
   tags:
     - windows
     - maven
     - java
-  before_script:
-    # Add hostname resolution mapping
-    - echo "3.101.190.84 bb6f8136416e" >> C:\Windows\System32\drivers\etc\hosts
-    # Configure Git globally
-    - git config --global url."http://3.101.190.84/".insteadOf "http://bb6f8136416e/"
-    - git config --global http.sslVerify false
-    - git config --global http.lowSpeedLimit 0
-    - git config --global http.lowSpeedTime 999999
-    # Manual clone with correct URL
-    - if (Test-Path ".git") { Remove-Item -Recurse -Force ".git" }
-    - git clone --depth 20 http://3.101.190.84/root/terraform-maven.git temp-repo
-    - Move-Item temp-repo/.git .
-    - Remove-Item -Recurse -Force temp-repo
-    - git reset --hard HEAD
   script:
+    - echo "Starting Maven build..."
     - mvn clean compile
+    - echo "Build completed successfully"
   artifacts:
     paths:
-      - target/*.war
+      - target/
+    expire_in: 1 hour
+  only:
+    - main
+    - develop
+    - merge_requests
 
+# Test stage - Run unit tests
 test:
   stage: test
   tags:
     - windows
     - maven
     - java
-  before_script:
-    # Add hostname resolution mapping
-    - echo "3.101.190.84 bb6f8136416e" >> C:\Windows\System32\drivers\etc\hosts
-    - git config --global url."http://3.101.190.84/".insteadOf "http://bb6f8136416e/"
-    - git config --global http.sslVerify false
   script:
+    - echo "Running Maven tests..."
     - mvn test
+    - echo "Tests completed"
+  artifacts:
+    reports:
+      junit:
+        - target/surefire-reports/TEST-*.xml
+    paths:
+      - target/surefire-reports/
+    expire_in: 1 week
+  coverage: '/Total.*?([0-9]{1,3})%/'
+  only:
+    - main
+    - develop
+    - merge_requests
 
+# Package stage - Create WAR file
 package:
   stage: package
   tags:
     - windows
     - maven
     - java
-  before_script:
-    # Add hostname resolution mapping
-    - echo "3.101.190.84 bb6f8136416e" >> C:\Windows\System32\drivers\etc\hosts
-    - git config --global url."http://3.101.190.84/".insteadOf "http://bb6f8136416e/"
-    - git config --global http.sslVerify false
   script:
-    - mvn package
+    - echo "Creating Maven package..."
+    - mvn package -DskipTests
+    - echo "Package created successfully"
+    - dir target\*.war
   artifacts:
     paths:
       - target/*.war
+    expire_in: 1 week
+  only:
+    - main
+    - develop
 
-# Deploy to Tomcat on EC2 instance
+# Deploy stage - Deploy to Tomcat on EC2 (manual trigger)
 deploy:
   stage: deploy
   tags:
@@ -85,24 +93,78 @@ deploy:
     - echo "Deploying to Tomcat on $DEPLOY_SERVER..."
     - |
       if (Test-Path "target\*.war") {
-        echo "WAR file found for deployment."
+        echo "WAR file found, ready for deployment"
         $warFile = Get-ChildItem target\*.war | Select-Object -First 1
         echo "WAR file: $($warFile.Name)"
         
         # Copy WAR file to EC2 instance
+        echo "Copying WAR file to EC2 instance..."
         scp -i pair08.pem target\*.war ${env:DEPLOY_USER}@${env:DEPLOY_SERVER}:/tmp/
         
         # Deploy to Tomcat container
-        ssh -i pair08.pem ${env:DEPLOY_USER}@${env:DEPLOY_SERVER} "sudo docker cp /tmp/*.war tomcat:/usr/local/tomcat/webapps/"
+        echo "Deploying to Tomcat container..."
+        $deployScript = @"
+          echo 'Connected to EC2 instance'
+          
+          # Stop any existing app with same name
+          sudo docker exec tomcat rm -f ${env:TOMCAT_WEBAPPS}/maven-challenge*.war 2>/dev/null || true
+          sudo docker exec tomcat rm -rf ${env:TOMCAT_WEBAPPS}/maven-challenge* 2>/dev/null || true
+          
+          # Copy new WAR file to Tomcat container
+          sudo docker cp /tmp/*.war tomcat:${env:TOMCAT_WEBAPPS}/
+          
+          # Verify deployment
+          sleep 5
+          sudo docker exec tomcat ls -la ${env:TOMCAT_WEBAPPS}/
+          
+          echo 'Deployment completed successfully'
+"@
         
-        echo "Deployment completed to: http://${env:DEPLOY_SERVER}:8080/terraform-maven"
+        ssh -i pair08.pem ${env:DEPLOY_USER}@${env:DEPLOY_SERVER} $deployScript
+        
+        echo "Application deployed to: http://${env:DEPLOY_SERVER}:8080/maven-challenge"
+        echo "Deployment completed successfully"
       } else {
         echo "No WAR file found!"
         exit 1
       }
-  artifacts:
-    paths:
-      - target/*.war
+  environment:
+    name: production
+    url: http://$DEPLOY_SERVER:8080/maven-challenge
   only:
     - main
   when: manual
+  allow_failure: false
+
+# Optional: Code quality check
+code_quality:
+  stage: test
+  tags:
+    - windows
+    - maven
+    - java
+  script:
+    - echo "Running code quality checks..."
+    - mvn checkstyle:check
+  allow_failure: true
+  only:
+    - merge_requests
+    - main
+
+# Optional: Security scan
+security_scan:
+  stage: test
+  tags:
+    - windows
+    - maven
+    - java
+  script:
+    - echo "Running security scan..."
+    - mvn dependency-check:check
+  artifacts:
+    reports:
+      dependency_scanning: target/dependency-check-report.xml
+  allow_failure: true
+  only:
+    - main
+    - schedules
