@@ -90,8 +90,9 @@ deploy:
     - $env:DEPLOY_SERVER_IP = "3.101.190.84"
     # Copy SSH key to working directory
     - Copy-Item "c:\Users\rance.c.v.linezo\Desktop\terraform\pair08.pem" ".\pair08.pem" -Force
-    # Set proper permissions for SSH key
-    - icacls ".\pair08.pem" /inheritance:r /grant:r "$env:USERNAME:R"
+    # Set proper permissions for SSH key (Windows format)
+    - icacls ".\pair08.pem" /inheritance:r
+    - icacls ".\pair08.pem" /grant "${env:USERNAME}:R"
   script:
     - mvn package -DskipTests
     - |
