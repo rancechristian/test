@@ -6,9 +6,9 @@ stages:
 
 variables:
   MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
-  DEPLOY_SERVER: "your-test-server.com" # Change as needed
-  DEPLOY_USER: "testuser" # Change as needed
-  DEPLOY_PATH: "/path/to/deploy" # Change as needed
+  DEPLOY_SERVER: "3.101.190.84" # Your EC2 instance
+  DEPLOY_USER: "ec2-user" # EC2 default user
+  DEPLOY_PATH: "/home/ec2-user/webapp" # Deployment path
 
 cache:
   paths:
@@ -35,13 +35,19 @@ package:
     paths:
       - target/*.war
 
-# Optional deploy step (requires SSH setup)
+# Deploy to Tomcat on EC2 instance
 deploy:
   stage: deploy
   script:
-    - echo "Deploying to $DEPLOY_SERVER..."
-    - 'if [ -f target/*.war ]; then echo "WAR file found."; fi'
-    # Example: scp target/*.war $DEPLOY_USER@$DEPLOY_SERVER:$DEPLOY_PATH
+    - echo "Deploying to Tomcat on $DEPLOY_SERVER..."
+    - 'if [ -f target/*.war ]; then echo "WAR file found for deployment."; fi'
+    # Copy WAR file to Tomcat webapps directory in Docker container
+    - echo "Deployment would copy WAR to Tomcat container"
+    # Example: scp target/*.war $DEPLOY_USER@$DEPLOY_SERVER:/tmp/
+    # Example: ssh $DEPLOY_USER@$DEPLOY_SERVER "sudo docker cp /tmp/*.war tomcat:/usr/local/tomcat/webapps/"
+  artifacts:
+    paths:
+      - target/*.war
   only:
     - main
   when: manual
