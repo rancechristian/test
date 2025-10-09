@@ -16,6 +16,10 @@ cache:
 
 build:
   stage: build
+  tags:
+    - windows
+    - maven
+    - java
   script:
     - mvn clean compile
   artifacts:
@@ -24,11 +28,19 @@ build:
 
 test:
   stage: test
+  tags:
+    - windows
+    - maven
+    - java
   script:
     - mvn test
 
 package:
   stage: package
+  tags:
+    - windows
+    - maven
+    - java
   script:
     - mvn package
   artifacts:
@@ -38,13 +50,29 @@ package:
 # Deploy to Tomcat on EC2 instance
 deploy:
   stage: deploy
+  tags:
+    - windows
+    - maven
+    - java
   script:
     - echo "Deploying to Tomcat on $DEPLOY_SERVER..."
-    - 'if [ -f target/*.war ]; then echo "WAR file found for deployment."; fi'
-    # Copy WAR file to Tomcat webapps directory in Docker container
-    - echo "Deployment would copy WAR to Tomcat container"
-    # Example: scp target/*.war $DEPLOY_USER@$DEPLOY_SERVER:/tmp/
-    # Example: ssh $DEPLOY_USER@$DEPLOY_SERVER "sudo docker cp /tmp/*.war tomcat:/usr/local/tomcat/webapps/"
+    - |
+      if (Test-Path "target\*.war") {
+        echo "WAR file found for deployment."
+        $warFile = Get-ChildItem target\*.war | Select-Object -First 1
+        echo "WAR file: $($warFile.Name)"
+        
+        # Copy WAR file to EC2 instance
+        scp -i pair08.pem target\*.war ${env:DEPLOY_USER}@${env:DEPLOY_SERVER}:/tmp/
+        
+        # Deploy to Tomcat container
+        ssh -i pair08.pem ${env:DEPLOY_USER}@${env:DEPLOY_SERVER} "sudo docker cp /tmp/*.war tomcat:/usr/local/tomcat/webapps/"
+        
+        echo "Deployment completed to: http://${env:DEPLOY_SERVER}:8080/maven-challenge"
+      } else {
+        echo "No WAR file found!"
+        exit 1
+      }
   artifacts:
     paths:
       - target/*.war
