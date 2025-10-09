@@ -9,6 +9,9 @@ variables:
   DEPLOY_SERVER: "3.101.190.84" # Your EC2 instance
   DEPLOY_USER: "ec2-user" # EC2 default user
   DEPLOY_PATH: "/home/ec2-user/webapp" # Deployment path
+  GIT_STRATEGY: "clone"
+  GIT_CLEAN_FLAGS: "-ffdx"
+  CI_REPOSITORY_URL: "http://3.101.190.84/root/terraform-maven.git"
 
 cache:
   paths:
@@ -20,6 +23,9 @@ build:
     - windows
     - maven
     - java
+  before_script:
+    - git config --global url."http://3.101.190.84/".insteadOf "http://bb6f8136416e/"
+    - git config --global http.sslVerify false
   script:
     - mvn clean compile
   artifacts:
@@ -32,6 +38,9 @@ test:
     - windows
     - maven
     - java
+  before_script:
+    - git config --global url."http://3.101.190.84/".insteadOf "http://bb6f8136416e/"
+    - git config --global http.sslVerify false
   script:
     - mvn test
 
@@ -41,6 +50,9 @@ package:
     - windows
     - maven
     - java
+  before_script:
+    - git config --global url."http://3.101.190.84/".insteadOf "http://bb6f8136416e/"
+    - git config --global http.sslVerify false
   script:
     - mvn package
   artifacts:
