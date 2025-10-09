@@ -9,9 +9,9 @@ variables:
   DEPLOY_SERVER: "3.101.190.84" # Your EC2 instance
   DEPLOY_USER: "ec2-user" # EC2 default user
   DEPLOY_PATH: "/home/ec2-user/webapp" # Deployment path
-  GIT_STRATEGY: "clone"
+  GIT_STRATEGY: "none"
   GIT_CLEAN_FLAGS: "-ffdx"
-  CI_REPOSITORY_URL: "http://3.101.190.84/root/terraform-maven.git"
+  GIT_CLONE_PATH: "$CI_BUILDS_DIR/manual-clone"
 
 cache:
   paths:
@@ -24,8 +24,19 @@ build:
     - maven
     - java
   before_script:
+    # Add hostname resolution mapping
+    - echo "3.101.190.84 bb6f8136416e" >> C:\Windows\System32\drivers\etc\hosts
+    # Configure Git globally
     - git config --global url."http://3.101.190.84/".insteadOf "http://bb6f8136416e/"
     - git config --global http.sslVerify false
+    - git config --global http.lowSpeedLimit 0
+    - git config --global http.lowSpeedTime 999999
+    # Manual clone with correct URL
+    - if (Test-Path ".git") { Remove-Item -Recurse -Force ".git" }
+    - git clone --depth 20 http://3.101.190.84/root/terraform-maven.git temp-repo
+    - Move-Item temp-repo/.git .
+    - Remove-Item -Recurse -Force temp-repo
+    - git reset --hard HEAD
   script:
     - mvn clean compile
   artifacts:
@@ -39,6 +50,8 @@ test:
     - maven
     - java
   before_script:
+    # Add hostname resolution mapping
+    - echo "3.101.190.84 bb6f8136416e" >> C:\Windows\System32\drivers\etc\hosts
     - git config --global url."http://3.101.190.84/".insteadOf "http://bb6f8136416e/"
     - git config --global http.sslVerify false
   script:
@@ -51,6 +64,8 @@ package:
     - maven
     - java
   before_script:
+    # Add hostname resolution mapping
+    - echo "3.101.190.84 bb6f8136416e" >> C:\Windows\System32\drivers\etc\hosts
     - git config --global url."http://3.101.190.84/".insteadOf "http://bb6f8136416e/"
     - git config --global http.sslVerify false
   script:
@@ -80,7 +95,7 @@ deploy:
         # Deploy to Tomcat container
         ssh -i pair08.pem ${env:DEPLOY_USER}@${env:DEPLOY_SERVER} "sudo docker cp /tmp/*.war tomcat:/usr/local/tomcat/webapps/"
         
-        echo "Deployment completed to: http://${env:DEPLOY_SERVER}:8080/maven-challenge"
+        echo "Deployment completed to: http://${env:DEPLOY_SERVER}:8080/terraform-maven"
       } else {
         echo "No WAR file found!"
         exit 1
