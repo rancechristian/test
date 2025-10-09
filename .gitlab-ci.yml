@@ -9,17 +9,41 @@ stages:
 
 variables:
   MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
-  DEPLOY_SERVER: "3.101.190.84" # Your EC2 instance
-  DEPLOY_USER: "ec2-user" # EC2 default user
-  DEPLOY_PATH: "/home/ec2-user/webapp" # Deployment path
+  DEPLOY_SERVER: "3.101.190.84"
+  DEPLOY_USER: "ec2-user"
+  DEPLOY_PATH: "/home/ec2-user/webapp"
   TOMCAT_WEBAPPS: "/usr/local/tomcat/webapps"
+  GIT_STRATEGY: "none"
+  GIT_CLEAN_FLAGS: "-ffdx"
 
 cache:
   paths:
     - .m2/repository
 
+# Global before_script for hostname resolution
+.git_config: &git_config
+  before_script:
+    - echo "Configuring Git and hostname resolution..."
+    - echo "3.101.190.84 bb6f8136416e" >> C:\Windows\System32\drivers\etc\hosts
+    - git config --global url."http://3.101.190.84/".insteadOf "http://bb6f8136416e/"
+    - git config --global http.sslVerify false
+    - git config --global http.lowSpeedLimit 0
+    - git config --global http.lowSpeedTime 999999
+    - |
+      if (Test-Path ".git") { 
+        Remove-Item -Recurse -Force ".git" -ErrorAction SilentlyContinue
+      }
+    - git clone --depth 20 http://3.101.190.84/root/terraform-maven.git temp-repo
+    - |
+      if (Test-Path "temp-repo/.git") {
+        Move-Item temp-repo/.git . -Force
+        Remove-Item -Recurse -Force temp-repo -ErrorAction SilentlyContinue
+        git reset --hard HEAD
+      }
+
 # Build stage - Compile the source code
 build:
+  <<: *git_config
   stage: build
   tags:
     - windows
@@ -40,6 +64,7 @@ build:
 
 # Test stage - Run unit tests
 test:
+  <<: *git_config
   stage: test
   tags:
     - windows
@@ -64,6 +89,7 @@ test:
 
 # Package stage - Create WAR file
 package:
+  <<: *git_config
   stage: package
   tags:
     - windows
@@ -89,40 +115,32 @@ deploy:
     - windows
     - maven
     - java
+  before_script:
+    - echo "Preparing deployment environment..."
+    - echo "3.101.190.84 bb6f8136416e" >> C:\Windows\System32\drivers\etc\hosts
   script:
-    - echo "Deploying to Tomcat on $DEPLOY_SERVER..."
+    - echo "Deploying to Tomcat on $env:DEPLOY_SERVER..."
     - |
       if (Test-Path "target\*.war") {
         echo "WAR file found, ready for deployment"
         $warFile = Get-ChildItem target\*.war | Select-Object -First 1
         echo "WAR file: $($warFile.Name)"
         
-        # Copy WAR file to EC2 instance
         echo "Copying WAR file to EC2 instance..."
         scp -i pair08.pem target\*.war ${env:DEPLOY_USER}@${env:DEPLOY_SERVER}:/tmp/
         
-        # Deploy to Tomcat container
         echo "Deploying to Tomcat container..."
-        $deployScript = @"
+        ssh -i pair08.pem ${env:DEPLOY_USER}@${env:DEPLOY_SERVER} "
           echo 'Connected to EC2 instance'
-          
-          # Stop any existing app with same name
-          sudo docker exec tomcat rm -f ${env:TOMCAT_WEBAPPS}/maven-challenge*.war 2>/dev/null || true
-          sudo docker exec tomcat rm -rf ${env:TOMCAT_WEBAPPS}/maven-challenge* 2>/dev/null || true
-          
-          # Copy new WAR file to Tomcat container
+          sudo docker exec tomcat rm -f ${env:TOMCAT_WEBAPPS}/terraform-maven*.war 2>/dev/null || true
+          sudo docker exec tomcat rm -rf ${env:TOMCAT_WEBAPPS}/terraform-maven* 2>/dev/null || true
           sudo docker cp /tmp/*.war tomcat:${env:TOMCAT_WEBAPPS}/
-          
-          # Verify deployment
           sleep 5
           sudo docker exec tomcat ls -la ${env:TOMCAT_WEBAPPS}/
-          
           echo 'Deployment completed successfully'
-"@
+        "
         
-        ssh -i pair08.pem ${env:DEPLOY_USER}@${env:DEPLOY_SERVER} $deployScript
-        
-        echo "Application deployed to: http://${env:DEPLOY_SERVER}:8080/maven-challenge"
+        echo "Application deployed to: http://${env:DEPLOY_SERVER}:8080/terraform-maven"
         echo "Deployment completed successfully"
       } else {
         echo "No WAR file found!"
@@ -130,7 +148,7 @@ deploy:
       }
   environment:
     name: production
-    url: http://$DEPLOY_SERVER:8080/maven-challenge
+    url: http://$DEPLOY_SERVER:8080/terraform-maven
   only:
     - main
   when: manual
