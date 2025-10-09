@@ -1,0 +1,47 @@
+stages:
+  - build
+  - test
+  - package
+  - deploy
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+  DEPLOY_SERVER: "your-test-server.com" # Change as needed
+  DEPLOY_USER: "testuser" # Change as needed
+  DEPLOY_PATH: "/path/to/deploy" # Change as needed
+
+cache:
+  paths:
+    - .m2/repository
+
+build:
+  stage: build
+  script:
+    - mvn clean compile
+  artifacts:
+    paths:
+      - target/*.war
+
+test:
+  stage: test
+  script:
+    - mvn test
+
+package:
+  stage: package
+  script:
+    - mvn package
+  artifacts:
+    paths:
+      - target/*.war
+
+# Optional deploy step (requires SSH setup)
+deploy:
+  stage: deploy
+  script:
+    - echo "Deploying to $DEPLOY_SERVER..."
+    - 'if [ -f target/*.war ]; then echo "WAR file found."; fi'
+    # Example: scp target/*.war $DEPLOY_USER@$DEPLOY_SERVER:$DEPLOY_PATH
+  only:
+    - main
+  when: manual
