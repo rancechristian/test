@@ -9,6 +9,11 @@ variables:
   DEPLOY_USER: "ec2-user"
   GIT_STRATEGY: "none"
 
+# Force PowerShell instead of PowerShell Core
+default:
+  before_script:
+    - echo "Using Windows PowerShell"
+
 cache:
   paths:
     - .m2/repository
@@ -50,6 +55,8 @@ build:
     - windows
     - maven
     - java
+  variables:
+    SHELL: "powershell"
   script:
     - mvn clean compile
   artifacts:
@@ -63,6 +70,8 @@ test:
     - windows
     - maven
     - java
+  variables:
+    SHELL: "powershell"
   script:
     - mvn test
 
@@ -72,6 +81,8 @@ deploy:
     - windows
     - maven
     - java
+  variables:
+    SHELL: "powershell"
   before_script:
     # Download and setup Maven if not exists
     - |
