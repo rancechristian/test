@@ -97,7 +97,9 @@ deploy:
         scp -i pair08.pem target\*.war ${env:DEPLOY_USER}@${env:DEPLOY_SERVER}:/tmp/
         ssh -i pair08.pem ${env:DEPLOY_USER}@${env:DEPLOY_SERVER} "sudo docker cp /tmp/*.war tomcat:/usr/local/tomcat/webapps/"
         echo "Deployed to: http://${env:DEPLOY_SERVER}:8080/terraform-maven"
+      } else {
+        echo "No WAR file found in target directory"
+        exit 1
       }
-  when: manual
   only:
     - main
