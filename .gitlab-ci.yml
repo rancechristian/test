@@ -94,9 +94,28 @@ deploy:
       if (Test-Path "target\*.war") {
         $warFile = Get-ChildItem target\*.war | Select-Object -First 1
         echo "Deploying: $($warFile.Name)"
+        
+        # Copy WAR file to server
         scp -i pair08.pem target\*.war ${env:DEPLOY_USER}@${env:DEPLOY_SERVER}:/tmp/
-        ssh -i pair08.pem ${env:DEPLOY_USER}@${env:DEPLOY_SERVER} "sudo docker cp /tmp/*.war tomcat:/usr/local/tomcat/webapps/"
-        echo "Deployed to: http://${env:DEPLOY_SERVER}:8080/terraform-maven"
+        
+        # Clean old deployment and deploy new WAR
+        ssh -i pair08.pem ${env:DEPLOY_USER}@${env:DEPLOY_SERVER} "
+          echo 'Cleaning old deployments...'
+          sudo docker exec tomcat rm -f /usr/local/tomcat/webapps/maven-challenge*.war 2>/dev/null || true
+          sudo docker exec tomcat rm -rf /usr/local/tomcat/webapps/maven-challenge* 2>/dev/null || true
+          
+          echo 'Deploying new WAR file...'
+          sudo docker cp /tmp/*.war tomcat:/usr/local/tomcat/webapps/
+          
+          echo 'Waiting for deployment...'
+          sleep 10
+          
+          echo 'Verifying deployment...'
+          sudo docker exec tomcat ls -la /usr/local/tomcat/webapps/ | grep maven-challenge || echo 'Deployment verification failed'
+        "
+        
+        echo "Deployed to: http://${env:DEPLOY_SERVER}:8080/maven-challenge"
+        echo "Application should be accessible in a few moments..."
       } else {
         echo "No WAR file found in target directory"
         exit 1
