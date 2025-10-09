@@ -90,9 +90,8 @@ deploy:
     - $env:DEPLOY_SERVER_IP = "3.101.190.84"
     # Copy SSH key to working directory
     - Copy-Item "c:\Users\rance.c.v.linezo\Desktop\terraform\pair08.pem" ".\pair08.pem" -Force
-    # Set proper permissions for SSH key (Windows format)
-    - icacls ".\pair08.pem" /inheritance:r
-    - icacls ".\pair08.pem" /grant "${env:USERNAME}:R"
+    # Set proper permissions for SSH key
+    - icacls ".\pair08.pem" /inheritance:r /grant:r "$env:USERNAME:R"
   script:
     - mvn package -DskipTests
     - |
@@ -100,10 +99,12 @@ deploy:
         $warFile = Get-ChildItem target\*.war | Select-Object -First 1
         echo "Deploying: $($warFile.Name)"
         echo "Copying WAR file to server..."
-        scp -i .\pair08.pem target\*.war ${env:DEPLOY_USER}@${env:DEPLOY_SERVER}:/tmp/
+        # Rename WAR file to maven-challenge.war for simpler URL
+        ssh -i .\pair08.pem ${env:DEPLOY_USER}@${env:DEPLOY_SERVER} "rm -f /tmp/maven-challenge.war"
+        scp -i .\pair08.pem target\*.war ${env:DEPLOY_USER}@${env:DEPLOY_SERVER}:/tmp/maven-challenge.war
         echo "Deploying to Tomcat container..."
-        ssh -i .\pair08.pem ${env:DEPLOY_USER}@${env:DEPLOY_SERVER} "sudo docker cp /tmp/*.war tomcat:/usr/local/tomcat/webapps/"
-        echo "Deployed to: http://${env:DEPLOY_SERVER}:8080/maven-challenge"
+        ssh -i .\pair08.pem ${env:DEPLOY_USER}@${env:DEPLOY_SERVER} "sudo docker cp /tmp/maven-challenge.war tomcat:/usr/local/tomcat/webapps/"
+        echo "Deployed to: http://${env:DEPLOY_SERVER}:8080/maven-challenge/"
         echo "Application should be accessible in a few moments..."
       } else {
         echo "No WAR file found in target directory"
